@@ -1,0 +1,88 @@
+name: AyuGram IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Build number (optional, auto if empty)"
+        required: false
+        type: string
+      source_branch:
+        description: "Branch to build (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-ipa:
+    runs-on: macos-13
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          ref: ${{ inputs.source_branch != '' && inputs.source_branch || github.ref }}
+
+      - name: Select Xcode from versions.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_VERSION=$(python3 -c 'import json;print(json.load(open("versions.json"))["xcode"])')
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          xcodebuild -version
+
+      - name: Prepare canonical workspace path
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /Users/Shared
+          cp -R "$GITHUB_WORKSPACE" /Users/Shared/
+          mv "/Users/Shared/$(basename "$GITHUB_WORKSPACE")" /Users/Shared/telegram-ios
+
+      - name: Build unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_DIR=/Users/Shared/telegram-ios
+          BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
+
+          cd "$SOURCE_DIR"
+
+          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
+          COMMIT_COUNT="$(git rev-list --count HEAD)"
+          AUTO_BUILD_NUMBER="$(($COMMIT_COUNT + $BUILD_NUMBER_OFFSET))"
+
+          if [ -n "${{ inputs.build_number }}" ]; then
+            BUILD_NUMBER="${{ inputs.build_number }}"
+          else
+            BUILD_NUMBER="$AUTO_BUILD_NUMBER"
+          fi
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+
+          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          python3 -u build-system/Make/Make.py \
+            --bazelUserRoot="$BAZEL_USER_ROOT" \
+            build \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --codesigningInformationPath=build-system/fake-codesigning \
+            --configuration=release_arm64 \
+            --buildNumber="$BUILD_NUMBER"
+
+          OUTPUT_PATH="build/artifacts"
+          rm -rf "$OUTPUT_PATH"
+          mkdir -p "$OUTPUT_PATH"
+          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
+            cp "$f" "$OUTPUT_PATH/"
+          done
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyuGram-unsigned-ipa-${{ env.BUILD_NUMBER }}
+          path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
+          if-no-files-found: error

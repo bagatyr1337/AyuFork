@@ -1,0 +1,14 @@
+{
+  "bundle_id": "com.yourname.AyuGram",
+  "api_id": "{! get one at https://my.telegram.org/apps !}",
+  "api_hash": "{! get one at https://my.telegram.org/apps !}",
+  "team_id": "{! Apple Team ID !}",
+  "app_center_id": "0",
+  "is_internal_build": "false",
+  "is_appstore_build": "false",
+  "appstore_id": "0",
+  "app_specific_url_scheme": "ayugram",
+  "premium_iap_product_id": "",
+  "enable_siri": true,
+  "enable_icloud": true
+}
