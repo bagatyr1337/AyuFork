@@ -37,11 +37,8 @@ jobs:
           if [ -d "$REQUESTED_XCODE" ]; then
             sudo xcode-select -s "$REQUESTED_XCODE"
           else
-            echo "Requested Xcode_${XCODE_VERSION}.app not found, using runner default Xcode."
-            FALLBACK_XCODE=$(ls -1d /Applications/Xcode*.app 2>/dev/null | head -n 1 || true)
-            if [ -n "$FALLBACK_XCODE" ]; then
-              sudo xcode-select -s "$FALLBACK_XCODE/Contents/Developer"
-            fi
+            echo "Requested Xcode_${XCODE_VERSION}.app not found, using currently selected runner default Xcode."
+            xcode-select -p
           fi
           xcodebuild -version
 
@@ -73,21 +70,39 @@ jobs:
           fi
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
+          OUTPUT_PATH="build/artifacts"
+          rm -rf "$OUTPUT_PATH"
+          mkdir -p "$OUTPUT_PATH"
+          BUILD_LOG="$OUTPUT_PATH/build.log"
+
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          set +e
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning \
             --configuration=release_arm64 \
-            --buildNumber="$BUILD_NUMBER"
+            --buildNumber="$BUILD_NUMBER" 2>&1 | tee "$BUILD_LOG"
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
 
-          OUTPUT_PATH="build/artifacts"
-          rm -rf "$OUTPUT_PATH"
-          mkdir -p "$OUTPUT_PATH"
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo "Build failed with exit code $BUILD_EXIT"
+            exit "$BUILD_EXIT"
+          fi
+
           for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
             cp "$f" "$OUTPUT_PATH/"
           done
+
+      - name: Upload build log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyuGram-build-log-${{ github.run_number }}
+          path: /Users/Shared/telegram-ios/build/artifacts/build.log
+          if-no-files-found: warn
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4

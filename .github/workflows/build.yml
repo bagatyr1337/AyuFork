@@ -23,11 +23,8 @@ jobs:
           if [ -d "$REQUESTED_XCODE" ]; then
             sudo xcode-select -s "$REQUESTED_XCODE"
           else
-            echo "Requested Xcode_$XCODE_VERSION.app not found, using runner default Xcode."
-            FALLBACK_XCODE=$(ls -1d /Applications/Xcode*.app 2>/dev/null | head -n 1 || true)
-            if [ -n "$FALLBACK_XCODE" ]; then
-              sudo xcode-select -s "$FALLBACK_XCODE/Contents/Developer"
-            fi
+            echo "Requested Xcode_$XCODE_VERSION.app not found, using currently selected runner default Xcode."
+            xcode-select -p
           fi
 
       - name: Create canonical source directory
