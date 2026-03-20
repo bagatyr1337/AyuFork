@@ -49,8 +49,7 @@ jobs:
           fi
 
           while read -r key path; do
-            module="${key#submodule.}"
-            module="${module%.path}"
+            module="${key%.path}"
             url="$(git config -f .gitmodules --get "${module}.url" || true)"
             if [ -z "$url" ]; then
               continue
