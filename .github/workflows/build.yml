@@ -16,6 +16,44 @@ jobs:
           submodules: 'recursive'
           fetch-depth: '0'
 
+      - name: Materialize submodule directories
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          resolve_url() {
+            case "$1" in
+              ../rlottie.git) echo "https://github.com/TelegramMessenger/rlottie.git" ;;
+              ../tgcalls.git) echo "https://github.com/TelegramMessenger/tgcalls.git" ;;
+              *) echo "$1" ;;
+            esac
+          }
+
+          if [ ! -f .gitmodules ]; then
+            echo "No .gitmodules found, skipping."
+            exit 0
+          fi
+
+          while read -r key path; do
+            module="${key#submodule.}"
+            module="${module%.path}"
+            url="$(git config -f .gitmodules --get "${module}.url" || true)"
+            if [ -z "$url" ]; then
+              continue
+            fi
+
+            if [ -d "$path" ] && [ -n "$(ls -A "$path" 2>/dev/null)" ]; then
+              echo "Submodule path already populated: $path"
+              continue
+            fi
+
+            resolved_url="$(resolve_url "$url")"
+            echo "Cloning $path from $resolved_url"
+            mkdir -p "$(dirname "$path")"
+            rm -rf "$path"
+            git -c protocol.version=2 clone --depth 1 --filter=blob:none "$resolved_url" "$path"
+          done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
+
       - name: Set active Xcode path
         run: |
           XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')

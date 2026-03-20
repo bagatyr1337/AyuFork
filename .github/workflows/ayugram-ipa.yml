@@ -28,6 +28,46 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.source_branch != '' && inputs.source_branch || github.ref }}
 
+      - name: Materialize submodule directories
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # This fork was initialized from a local copy, so gitlink metadata may be missing.
+          # Recreate submodule directories from .gitmodules to keep Bazel paths valid.
+          resolve_url() {
+            case "$1" in
+              ../rlottie.git) echo "https://github.com/TelegramMessenger/rlottie.git" ;;
+              ../tgcalls.git) echo "https://github.com/TelegramMessenger/tgcalls.git" ;;
+              *) echo "$1" ;;
+            esac
+          }
+
+          if [ ! -f .gitmodules ]; then
+            echo "No .gitmodules found, skipping."
+            exit 0
+          fi
+
+          while read -r key path; do
+            module="${key#submodule.}"
+            module="${module%.path}"
+            url="$(git config -f .gitmodules --get "${module}.url" || true)"
+            if [ -z "$url" ]; then
+              continue
+            fi
+
+            if [ -d "$path" ] && [ -n "$(ls -A "$path" 2>/dev/null)" ]; then
+              echo "Submodule path already populated: $path"
+              continue
+            fi
+
+            resolved_url="$(resolve_url "$url")"
+            echo "Cloning $path from $resolved_url"
+            mkdir -p "$(dirname "$path")"
+            rm -rf "$path"
+            git -c protocol.version=2 clone --depth 1 --filter=blob:none "$resolved_url" "$path"
+          done < <(git config -f .gitmodules --get-regexp '^submodule\..*\.path$')
+
       - name: Select Xcode from versions.json
         shell: bash
         run: |
