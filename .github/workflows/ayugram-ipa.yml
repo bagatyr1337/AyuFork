@@ -78,6 +78,8 @@ jobs:
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           set +e
           python3 -u build-system/Make/Make.py \
+            --overrideBazelVersion \
+            --overrideXcodeVersion \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
